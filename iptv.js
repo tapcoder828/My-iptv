@@ -5,7 +5,7 @@ const path = require('path');
 const CATEGORY = 'hoat-hinh';
 const PAGES_TO_SCAN = 5;       // Chỉ quét 5 trang đầu để lấy phim mới nhất
 const OUTPUT_FILE = 'kkphim.m3u';
-const MAX_ITEMS = 5000;        // Giới hạn số lượng phim để TV không bị lag
+const MAX_ITEMS = 25000;        // Giới hạn số lượng phim để TV không bị lag
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
