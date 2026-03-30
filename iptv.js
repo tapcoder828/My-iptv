@@ -1,11 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// --- CẤU HÌNH ---
 const CATEGORY = 'hoat-hinh';
-const PAGES_TO_SCAN = 5;       // Chỉ quét 5 trang đầu để lấy phim mới nhất
+const PAGES_TO_SCAN = 800;    // Tăng vọt lên để lấy lại phim cũ
 const OUTPUT_FILE = 'kkphim.m3u';
-const MAX_ITEMS = 25000;        // Giới hạn số lượng phim để TV không bị lag
+const MAX_ITEMS = 25000;       
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -17,27 +16,18 @@ async function fetchJson(url) {
 }
 
 async function start() {
-    console.log(`--- BẮT ĐẦU CẬP NHẬT PHIM MỚI ---`);
+    console.log(`--- ĐANG QUÉT TỔNG LỰC ĐỂ LẤY LẠI KHO PHIM ---`);
+    let m3uContent = "#EXTM3U\n";
+    let count = 0;
 
-    // 1. Đọc dữ liệu cũ đã có
-    let oldContent = "";
-    if (fs.existsSync(OUTPUT_FILE)) {
-        oldContent = fs.readFileSync(OUTPUT_FILE, 'utf8');
-    }
-
-    let newEntries = [];
-    
-    // 2. Quét các trang mới nhất
     for (let p = 1; p <= PAGES_TO_SCAN; p++) {
-        console.log(`>> Đang kiểm tra trang phim mới: ${p}...`);
+        console.log(`>> Đang cào trang ${p}...`);
         const data = await fetchJson(`https://phimapi.com/v1/api/danh-sach/${CATEGORY}?page=${p}`);
-        if (!data || !data.data.items) break;
+        if (!data || !data.data.items || data.data.items.length === 0) break;
 
-        const movies = data.data.items;
-        for (const m of movies) {
-            // Nếu phim này đã có trong file cũ thì bỏ qua (tiết kiệm thời gian)
-            if (oldContent.includes(m.slug)) continue;
-
+        for (const m of data.data.items) {
+            if (count >= MAX_ITEMS) break;
+            
             const detail = await fetchJson(`https://phimapi.com/phim/${m.slug}`);
             if (detail && detail.episodes) {
                 const movieName = detail.movie.name;
@@ -46,37 +36,18 @@ async function start() {
                 detail.episodes.forEach(server => {
                     server.server_data.forEach(ep => {
                         if (ep.link_m3u8) {
-                            const entry = `#EXTINF:-1 tvg-logo="${poster}" group-title="${CATEGORY}", ${movieName} - ${ep.name}\n${ep.link_m3u8}\n`;
-                            newEntries.push(entry);
+                            m3uContent += `#EXTINF:-1 tvg-logo="${poster}" group-title="${CATEGORY}", ${movieName} - ${ep.name}\n${ep.link_m3u8}\n`;
+                            count++;
                         }
                     });
                 });
             }
-            await delay(200); // Nghỉ ngắn để tránh bị block
+            await delay(100); 
         }
+        if (count >= MAX_ITEMS) break;
     }
 
-    // 3. Ghép phim mới lên ĐẦU danh sách (để vào app thấy phim mới ngay)
-    let finalContent = "";
-    if (newEntries.length > 0) {
-        console.log(`[+] Tìm thấy ${newEntries.length} tập phim mới!`);
-        // Loại bỏ dòng tiêu đề cũ nếu có để ghép cho chuẩn
-        const cleanOldContent = oldContent.replace("#EXTM3U\n", "");
-        finalContent = "#EXTM3U\n" + newEntries.join("") + cleanOldContent;
-    } else {
-        console.log(`[!] Không có phim mới nào.`);
-        finalContent = oldContent;
-    }
-
-    // 4. Giới hạn dung lượng file (Cắt bớt phim cũ nhất nếu quá dài)
-    const lines = finalContent.split('\n');
-    if (lines.length > MAX_ITEMS * 2) {
-        console.log(`[!] Danh sách quá dài, đang tối ưu để TV chạy mượt...`);
-        finalContent = lines.slice(0, MAX_ITEMS * 2).join('\n');
-    }
-
-    fs.writeFileSync(OUTPUT_FILE, finalContent);
-    console.log(`--- HOÀN TẤT! Đã cập nhật phim mới vào ${OUTPUT_FILE} ---`);
+    fs.writeFileSync(OUTPUT_FILE, m3uContent);
+    console.log(`--- XONG! Đã lấy được ${count} tập phim. ---`);
 }
-
 start();
